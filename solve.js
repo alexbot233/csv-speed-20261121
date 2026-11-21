@@ -2,18 +2,21 @@
 //
 // Same single left-to-right pass and broken-row policy as the reference (BOM drop,
 // empty-line skipping, stray CRs, quoted escapes/junk/unterminated quotes, width
-// padding/cutting, and error order), but fields are located by charCodeAt and cut
-// out with slice() instead of being concatenated one character at a time. Quoted
-// fields only allocate a parts array when they really contain an escape, CRLF or
-// line break; ordinary fields cost one slice each and no string addition. Escape
-// pieces and field arrays are filled by indexed stores rather than push() calls,
-// which keeps the V8 hot loops free of builtin-call overhead.
-// Correctness is verified against the reference implementation and fuzz cases.
+// padding/cutting, and error order), but unquoted fields are located with charCodeAt
+// and sliced out, while a global /["\r\n]/g regex with lastIndex jumps directly to
+// each quote, CR or LF inside a quoted field instead of visiting every character in
+// JavaScript. Quoted fields only allocate a parts array when they really contain an
+// escape, CRLF or line break; ordinary fields cost one slice each and no string
+// addition. Escape pieces and field arrays are filled by indexed stores rather than
+// push() calls, which keeps the V8 hot loops free of builtin-call overhead.
 
 /** Field end: 0 = comma (record goes on), 1 = line break (record ends), 2 = end of text. */
 const COMMA = 0;
 const LINE_BREAK = 1;
 const END = 2;
+
+/** The next quote, CR or LF in a quoted field, searched from RegExp.lastIndex. */
+const QUOTED_SPECIAL = /["\r\n]/g;
 
 /** One CSV input {text, header} -> {columns, rows, errors}. */
 export function run(input) {
@@ -103,31 +106,32 @@ export function run(input) {
     let np = 0; // number of pieces accumulated for parts
     let closed = false;
     while (pos < n) {
-      const c = text.charCodeAt(pos);
+      QUOTED_SPECIAL.lastIndex = pos;
+      const m = QUOTED_SPECIAL.exec(text);
+      if (m === null) { pos = n; break; }
+      const q = m.index; // the special's index, which may be past `pos`
+      const c = m[0].charCodeAt(0);
       if (c === 34) { // "
-        if (pos + 1 < n && text.charCodeAt(pos + 1) === 34) {
+        if (q + 1 < n && text.charCodeAt(q + 1) === 34) {
           if (parts === null) parts = [];
-          parts[np++] = text.slice(segStart, pos);
+          parts[np++] = text.slice(segStart, q);
           parts[np++] = '"';
-          pos += 2;
+          pos = q + 2;
           segStart = pos;
           continue;
         }
-        contentEnd = pos;
-        pos += 1;
+        contentEnd = q;
+        pos = q + 1;
         closed = true;
         break;
       }
-      if (c === 13 || c === 10) { // each CR, CRLF or LF inside quotes reads as one LF
-        if (parts === null) parts = [];
-        parts[np++] = text.slice(segStart, pos);
-        parts[np++] = '\n';
-        line += 1;
-        pos += c === 13 && pos + 1 < n && text.charCodeAt(pos + 1) === 10 ? 2 : 1;
-        segStart = pos;
-        continue;
-      }
-      pos += 1;
+      // Each CR, CRLF or LF inside quotes reads as one LF and advances the line.
+      if (parts === null) parts = [];
+      parts[np++] = text.slice(segStart, q);
+      parts[np++] = '\n';
+      line += 1;
+      pos = q + (c === 13 && q + 1 < n && text.charCodeAt(q + 1) === 10 ? 2 : 1);
+      segStart = pos;
     }
     if (!closed) {
       // The opening quote was a literal; reread everything after it as unquoted,
