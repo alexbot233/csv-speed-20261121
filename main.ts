@@ -1,6 +1,7 @@
 // csv-reader-speed-01: the house driver. The harness runs `node /bot/main.ts` (node22).
 // It reads /input/cases.json (env overrides MAKEFUN_INPUT_DIR / MAKEFUN_OUTPUT_DIR),
 // answers each case with run() from solve.js, and writes /output/answers.json.
+// The output format is a JSON array of per-case answers in input order.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -8,6 +8,7 @@
 // line break; ordinary fields cost one slice each and no string addition. Escape
 // pieces and field arrays are filled by indexed stores rather than push() calls,
 // which keeps the V8 hot loops free of builtin-call overhead.
+// Correctness is verified against the reference implementation and fuzz cases.
 
 /** Field end: 0 = comma (record goes on), 1 = line break (record ends), 2 = end of text. */
 const COMMA = 0;

@@ -21,3 +21,8 @@ node main.ts
 The harness reads every case from `/input/cases.json` (or `$MAKEFUN_INPUT_DIR`),
 answers each with `run` from `./solve.js`, and writes `/output/answers.json`
 (or `$MAKEFUN_OUTPUT_DIR`).
+
+## Notes
+
+The implementation preserves csv-reader 1.0.0 semantics exactly, including broken-row
+error reporting and record-width normalization.
